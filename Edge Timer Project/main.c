@@ -11,12 +11,18 @@ uint8_t buffer[BufferSize];
 char str[] = "Give Red LED control input (Y = On, N = off):\r\n";
 
 int main(void){
-	//char rxByte;
-	int		timer_value;
+	char rxByte;
+	int 		lower_limit = 950;
+	int 		upper_limit = 1050;
+	int 		new_low_limit;
+	int		timer_value[1000];
+	int		final_display_time[100], final_display_counts[100];
+	int		out_of_limits = 0';
 	int		n ;
 	int		i ;
+	int retest = 0;
 	float b;
-	bool capture_control = 0;
+	char limit_choice = 0;
 	
 	System_Clock_Init(); // Switch System Clock = 80 MHz
 	LED_Init();
@@ -32,29 +38,79 @@ int main(void){
 	TIM2->TIM2_CCER |= 0x0001; // Enable capture of counter into capture register
 	TIM2->TIM2_PSC |= 0x0000; // Presacler value
 	
-	//IF CC1F FLAG IS SET AND capture_control TRUE THEN 
-	//GET VALUE FROM TIMx_CCR1
-	//RESET	TIM2_CNT TO 0
-	//TOGGLE capture_control
-	//CLEAR FLAG
-	//ELSE IF CC1F FLAG IS SET AND capture_control FALSE THEN
-	//TOGGLE capture_control
-	//CLEAR FLAG
-	//END IF
+	//Initialize final display array
+	for (int i = 0; i <= 100; i++) 
+	{
+		final_display_time[i]= lower_limit + i;
+	}
 	
-	while (1){
-		if ((TIM2->TIM2_SR & 0x0002) && (capture_control == 1))
+	final_display_counts = {0};
+	
+	while(limit_choice == 0)
+	{
+		USART_Write("Current Lower Limit:\t", lower_limit, "\tCurrent Upper Limit:\t", upper_limit);
+		USART_Write("\nEnter 0 to change limits.  Enter 1 to continue");
+		limit_choice = USART_Read(USART2);
+		if(limit_choice == 0)
 		{
-			timer_value = TIM2->TIM2_CCR1;
-			TIM2->TIM2_CNT &= 0x0000;
-			capture_control = 0;
-			TIM2->TIM2_SR &= 0x0000;
+			do
+			{
+				USART_Write("\nEnter value for new lower limit.  Value must be between 50 and 9950.")
+				new_low_limit = USART_Read(USART2);
+				if((new_low_limit < 50) || (new_low_limit > 9950))
+					USART_Write("\nLower limit must be between 50 and 9950");
+			} while ((new_low_limit < 50) || (new_low_limit > 9950));
+			lower_limit = new_low_limit;
+			upper_limit = lower_limit + 100;
 		}
-		else if ((TIM2->TIM2_SR & 0x0002) && (capture_control == 0))
+		else 
+			break;
+	}
+	
+	
+	USART_Write("\nSystem ready to measure input signal.  Press enter to continue.");
+	do
+	{
+		rxByte = USART_Read(USART2);
+	}
+	while (rxByte != 0x0A);
+	
+	while (retest == 0){
+		
+		for (int i = 0; i <1000; i++)
 		{
-			capture_control = 1;
-			TIM2->TIM2_SR &= 0x0000;
+			if (TIM2->TIM2_SR & 0x0002)
+			{
+				timer_value[i]= TIM2->TIM2_CCR1;
+				TIM2->TIM2_CNT &= 0x0000;
+				//TIM2->TIM2_SR &= 0x0000;
+			}
 		}
+		
+		for (int i = 0; i < 1000; i++) 
+		{
+			if(timer_value[i] == 0)
+				continue;
+			for(int q = 0; q <= 100; q++)
+			{
+				if(timer_value[i] == final_display_time[q])
+					final_display_counts[q] +=1;
+					break;
+				else
+					continue;
+				if(q==100)
+					out_of_limits++;
+			}
+		}
+		
+		for(int i = 0; i <= 100; i++)
+		{
+			USART_Write(final_display_time[i], "\t", final_display_counts[i], "\n");
+		}
+		USART_Write(out_of_limits);
+		
+		USART_Write("Would you like to gather another data set?");
+		
 		
 		//n = sprintf((char *)buffer, "a = %d\t", a);
 		//n += sprintf((char *)buffer + n, "b = %f\r\n", b);

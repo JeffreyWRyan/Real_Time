@@ -1,6 +1,5 @@
 #include "stm32l476xx.h"
 #include "SysClock.h"
-#include "LED.h"
 #include "UART.h"
 
 #include <string.h>
@@ -8,109 +7,79 @@
 #include <stdio.h>
 #include <math.h>
 
-void initialize_final_arrays(int lower_limit, int final_display_time[]);
+void initialize_final_arrays(int lower_limit);
 void GPIO_Timer_init(void);
-int POST(int timer_value[]);
-char adjust_limits(int *lower_limit, int *upper_limit);
 void system_wait(void);
-void data_collection(int timer_value[]);
-void fill_final_arrays(int timer_value[], int final_display_time[], int final_display_counts[], int *out_of_limits);
-void display_final_arrays(int final_display_time[], int final_display_counts[], int out_of_limits);
+void data_collection(void);
+void fill_final_arrays(void);
+void display_final_arrays(void);
 
-char post_fail_str[] = "\nPOST has failed.  Would you like to run POST again?\nEnter 0 to retest, or enter 1 to continue";
-char retest_str[] = "\nEnter 0 to retest.  Enter 1 to quit.";
-char reuse_lims_str[] = "\nEnter 0 to use the same limits.  Enter 1 to change the limits.";
-char low_limit_str[] = "\nEnter value for new lower limit.  Value must be between 50 and 9950. Press enter when finished";
-char sys_ready_str[] = "\nSystem ready to measure input signal.  Press enter to continue.";
-char curr_low_lim_str[] = "\nCurrent Lower Limit:\t";
+void limit_process(int *lower_limit, int *upper_limit);
+void post_process(void);
+
+char post_fail_str[] = "\r\nPOST has failed.  Would you like to run POST again?\r\nEnter 0 to retest, or enter 1 to continue\r\n";
+char retest_str[] = "\r\nEnter 0 to retest.  Enter 1 to quit.\r\n";
+char reuse_lims_str[] = "\r\nEnter 0 to use these limits.  Enter 1 to change the limits.\r\n";
+char low_limit_str[] = "\r\nEnter value for new lower limit; must be between 50 and 9950. Press enter when finished\r\n";
+char sys_ready_str[] = "\r\nSystem ready to measure input signal.  Press enter to continue.\r\n";
+char curr_low_lim_str[] = "\r\nCurrent Lower Limit:\t";
 char curr_high_lim_str[] = "\tCurrent Upper Limit:\t";
 char tab_str[] = "\t";
-char ret_str[] = "\n";
+char ret_str[] = "\r\n";
 char int_buff[4];
 
-int			timer_value[1000];
+int			timer_value[1000] = {1032, 1030, 1002, 1002, 1019, 997, 1034, 1015, 965, 962};
 int			final_display_time[100];
-int   	final_display_counts[100] = {0};
+int   	final_display_counts[100];
 
 int main(void){
-	int 		post_fail = 0;
-	char 		rxByte, rxByte2;
+	char 		rxByte;
 	int 		lower_limit = 950;
 	int			*p_lower_limit = &lower_limit;
 	int 		upper_limit = 1050;
 	int			*p_upper_limit = &upper_limit;
-	int			out_of_limits = 0;
-	int			*p_out_of_limits = &out_of_limits;
 	int 		retest = 0;
-	char 		limit_choice = 0;
 	
-	System_Clock_Init(); // Switch System Clock = 80 MHz
-	LED_Init();
+	System_Clock_Init();	// Switch System Clock = 80 MHz
+	
 	UART2_Init();
+	
 	GPIO_Timer_init();
 	
-	do
-	{
-		post_fail = POST(timer_value);
-		if(post_fail == 1)
-		{
-			USART_Write(USART2, (uint8_t *)post_fail_str, strlen(post_fail_str));
-			rxByte = USART_Read(USART2);
-			if (rxByte == 0)
-				post_fail = 1;
-			else if (rxByte == 1)
-				post_fail = 0;
-			else
-				continue;
-		}
-	}
-	while(post_fail == 1);
+	post_process();
 	
-	while(limit_choice == 0)
-	{
-		limit_choice = adjust_limits(p_lower_limit, p_upper_limit);
-	}
-	initialize_final_arrays(lower_limit, final_display_time);
+	while (retest == 0)
+	{	
+		limit_process(p_lower_limit, p_upper_limit);
 	
-	system_wait();
+		initialize_final_arrays(lower_limit);
 	
-	while (retest == 0){
-		
-		data_collection(timer_value);
-		fill_final_arrays(timer_value, final_display_time, final_display_counts, p_out_of_limits);
-		display_final_arrays(final_display_time, final_display_counts, out_of_limits);
+		system_wait();
+	
+		//data_collection();
+		fill_final_arrays();
+		display_final_arrays();
 		
 		USART_Write(USART2, (uint8_t *)retest_str, strlen(retest_str));
 		rxByte = USART_Read(USART2);
-		if(rxByte == 0)
-		{
-			USART_Write(USART2,(uint8_t *)reuse_lims_str , strlen(reuse_lims_str));
-			rxByte2 = USART_Read(USART2);
-			if(rxByte2 == 0)
-				continue;
-			else if (rxByte == 1)
-			{
-				adjust_limits(p_lower_limit, p_upper_limit);
-			}
-		}
-		else
-			break;
+		retest = rxByte - 48;
 	}
 	
 	while(1){}
 }
-
-void initialize_final_arrays(int lower_limit, int final_display_time[])
+//FUNCTION FILLS THE TIME ARRAY WITH INTEGER VALUES FROM LOWER LIMIT TO UPPER LIMIT
+void initialize_final_arrays(int lower_limit)
 {
 		//Initialize final display array
 	for (int i = 0; i <= 100; i++) 
 	{
 		final_display_time[i]= lower_limit + i;
+		final_display_counts[i] = 0;
 	}
 	
 	return;
 }
-
+//FUNCTION THAT INITIALIZES THE GPIO PORT AND CONFIGURES THE TIMER AS INPUT CAPTURE
 void GPIO_Timer_init(void)
 {
 	//Enable GPIOB clock
@@ -146,16 +115,16 @@ void GPIO_Timer_init(void)
 	
 	return;
 }
-
-char adjust_limits(int *lower_limit, int *upper_limit)
+//FUNCTION THAT DISPLAYS THE LIMITS OF THE PROGRAM AND ALLOWS THE USER TO CHANGE THE LIMITS
+void limit_process(int *lower_limit, int *upper_limit)
 {
 	int 		new_low_limit = 0;
 	char		i = 0;
 	char		rxByte = 0;
 	char		new_low_limit_str[5];
 	char		limit_choice;
-		
-	  USART_Write(USART2, (uint8_t *)curr_low_lim_str, strlen(curr_low_lim_str));
+	
+		USART_Write(USART2, (uint8_t *)curr_low_lim_str, strlen(curr_low_lim_str));
 	  sprintf(int_buff, "%d", (int)*lower_limit);
 	  USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
 	  USART_Write(USART2, (uint8_t *)curr_high_lim_str, strlen(curr_high_lim_str));
@@ -164,8 +133,8 @@ char adjust_limits(int *lower_limit, int *upper_limit)
 		USART_Write(USART2, (uint8_t *)reuse_lims_str, strlen(reuse_lims_str));
 	
 		limit_choice = USART_Read(USART2);
-
-		if(limit_choice == 0x31)
+		
+		while(limit_choice == 0x31)
 		{
 			do
 			{
@@ -179,19 +148,25 @@ char adjust_limits(int *lower_limit, int *upper_limit)
 				}
 				i = 0;
 				new_low_limit = atoi(new_low_limit_str);
-				
-				sprintf(int_buff, "%d", (int)new_low_limit);
-				USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
 				rxByte = 0;
 			} while ((new_low_limit < 50) || (new_low_limit > 9950));
 			
 			*lower_limit = new_low_limit;
 			*upper_limit = new_low_limit + 100;
+			
+			USART_Write(USART2, (uint8_t *)curr_low_lim_str, strlen(curr_low_lim_str));
+			sprintf(int_buff, "%d", (int)*lower_limit);
+			USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
+			USART_Write(USART2, (uint8_t *)curr_high_lim_str, strlen(curr_high_lim_str));
+			sprintf(int_buff, "%d", (int)*upper_limit);
+			USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
+			USART_Write(USART2, (uint8_t *)reuse_lims_str, strlen(reuse_lims_str));
+	
+			limit_choice = USART_Read(USART2);
 		}
-		
-		return limit_choice;
+		return;
 }
-
+//FUNCTION THAT WAITS FOR THE USER TO PRESS ENTER
 void system_wait(void)
 {
 	char rxByte;
@@ -205,8 +180,8 @@ void system_wait(void)
 	
 	return;
 }
-
-void data_collection(int timer_value[])
+//FUNCTION THAT COLLECTS THE DATA
+void data_collection(void)
 {
 		for (int i = 0; i <1000; i++)
 		{
@@ -218,29 +193,27 @@ void data_collection(int timer_value[])
 		
 		return;
 }
-
-void fill_final_arrays(int timer_value[], int final_display_time[], int final_display_counts[], int *out_of_limits)
+//FUNCTION THAT FILLS THE FINAL ARRAYS WITH THE FREQUENCY DATA FROM DATA COLLECTION
+void fill_final_arrays(void)
 {
 		for (int i = 0; i < 1000; i++) 
 		{
-			if(timer_value[i] == 0)
-				continue;
 			for(int q = 0; q <= 100; q++)
 			{
 				if(timer_value[i] == final_display_time[q])
-					final_display_counts[q] +=1;
-				if(q==100)
-					*out_of_limits+=1;
+					final_display_counts[q] += 1;
 			}
 		}
 		
 		return;
 }
-
-void display_final_arrays(int final_display_time[], int final_display_counts[], int out_of_limits)
+//FUNCTION THAT DISPLAYS THE FINAL ARRAYS AS TWO COLUMNS
+void display_final_arrays(void)
 {
-			for(int i = 0; i <= 100; i++)
+		for(int i = 0; i <= 100; i++)
 		{
+			if(final_display_counts[i] == 0)
+				continue;
 			sprintf(int_buff, "%d", (int)final_display_time[i]);
 			USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
 			USART_Write(USART2, (uint8_t *)tab_str, strlen(tab_str));
@@ -248,24 +221,41 @@ void display_final_arrays(int final_display_time[], int final_display_counts[], 
 			USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
 			USART_Write(USART2, (uint8_t *)ret_str, strlen(ret_str));
 		}
-		USART_Write(USART2, (uint8_t *)out_of_limits, 4);
 		
 		return;
 }
-
-int POST(int timer_value[])
+// FUNCTION THAT PERFORMS THE POST
+void post_process(void)
 {
-	int post_fail = 0;
+	int i = 0;
+	int post_value;
+	char re_post = 0;
+	char fail_post = 0;
 	
-	data_collection(timer_value);
-	
-	for(int i = 0; i < 1000; i++)
+	while(re_post == 0)
 	{
-		if(timer_value[i] > 100)
-			post_fail = 1;
-		else
-			continue;
-	}
+		while(i<500)
+		{
+			//while(TIM4->SR != 0x2){}
+			//post_value = TIM4->CCR1;
+			//TIM4->CNT = 0;
+			
+			if(post_value > 100000)
+				fail_post = 1;
+			i++;
+		}
 	
-	return post_fail;
+		if(fail_post)
+		{
+			USART_Write(USART2, (uint8_t *)post_fail_str, strlen(post_fail_str));
+			re_post = USART_Read(USART2);
+			re_post = re_post - 48;
+			if(re_post == 0)
+			{
+				i = 0;
+				fail_post = 0;
+			}
+		}
+	}
+	return;
 }

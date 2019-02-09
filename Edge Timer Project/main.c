@@ -11,7 +11,7 @@ void initialize_final_arrays(int lower_limit);
 void GPIO_Timer_init(void);
 void system_wait(void);
 void data_collection(void);
-void fill_final_arrays(void);
+void fill_final_arrays(int lower_limit);
 void display_final_arrays(void);
 
 void limit_process(int *lower_limit, int *upper_limit);
@@ -59,7 +59,7 @@ int main(void){
 		system_wait();
 	
 		data_collection();
-		fill_final_arrays();
+		fill_final_arrays(lower_limit);
 		display_final_arrays();
 		
 		USART_Write(USART2, (uint8_t *)retest_str, strlen(retest_str));
@@ -105,7 +105,7 @@ void limit_process(int *lower_limit, int *upper_limit)
 	char		new_low_limit_str[5];
 	char		limit_choice;
 	
-		USART_Write(USART2, (uint8_t *)curr_low_lim_str, strlen(curr_low_lim_str));
+	  USART_Write(USART2, (uint8_t *)curr_low_lim_str, strlen(curr_low_lim_str));
 	  sprintf(int_buff, "%d", (int)*lower_limit);
 	  USART_Write(USART2, (uint8_t *)int_buff, strlen(int_buff));
 	  USART_Write(USART2, (uint8_t *)curr_high_lim_str, strlen(curr_high_lim_str));
@@ -186,21 +186,18 @@ void data_collection(void)
 	return;
 }
 //FUNCTION THAT FILLS THE FINAL ARRAYS WITH THE FREQUENCY DATA FROM DATA COLLECTION
-void fill_final_arrays(void)
+void fill_final_arrays(int lower_limit)
 {
-		for (int i = 0; i <= 1000; i++) 
-		{
-			for(int q = 0; q <= 100; q++)
-			{
-				if(timer_value[i] == final_display_time[q])
-				{
-					final_display_counts[q] += 1;
-					continue;
-				}
-			}
-		}
+	unsigned int timing_bin;
+	for (int i = 0; i <= 1000; i++) 
+	{
+		timing_bin = (unsigned int) (timer_value[i] - lower_limit);
+		if(timing_bin > 100)
+			continue;
+		final_display_counts[timing_bin]++;
+	}
 		
-		return;
+	return;
 }
 //FUNCTION THAT DISPLAYS THE FINAL ARRAYS AS TWO COLUMNS
 void display_final_arrays(void)

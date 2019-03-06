@@ -78,6 +78,9 @@ unsigned char loop_count[2] = {0, 0};
 unsigned char loop_start[2] = {0, 0};
 unsigned char nested_check[2] = {0, 0};
 
+//test
+unsigned char test[3] = "MOV";
+
 int main (void)
 {
 	//Initialize the microcontroller;
@@ -93,8 +96,6 @@ int main (void)
 		
 		//Allow user to enter commands
 		process_user_commands();
-		event_handler_servo1(SERVO1);
-		event_handler_servo2(SERVO2);
 		
 		//Apply recipe commands to servo 1
 		main_control(SERVO1);
@@ -102,7 +103,6 @@ int main (void)
 		
 		//Apply recipe commands to servo 2
 		main_control(SERVO2);
-		check_status_leds(SERVO2);
 		
 		while(1)
 		{
@@ -173,7 +173,7 @@ void timer3_init()
     //Set the auto reload preload functionality
     TIM3->CR1 |= 1<<7;
     //Set auto reload register to 1000 for 100ms
-    TIM3->ARR = 1000;
+    TIM3->ARR = 5000;
     //Set update event for prescaler
     TIM3->EGR |= TIM_EGR_UG;
     //Clear extraneous update flag
@@ -228,13 +228,13 @@ void move_servo(uint8_t servo_select, uint32_t position)
 		current_servo_status[servo_select] = status_command_error;
 	else if (servo_select == SERVO1)
 	{
-		TIM2->CCR1 = position;
-		servo_position[servo_select] = pwm_position;
+		TIM2->CCR1 = pwm_position;
+		servo_position[servo_select] = position;
 	}
 	else if (servo_select == SERVO2)
 	{
-		TIM2->CCR2 = position;
-		servo_position[servo_select] = pwm_position;
+		TIM2->CCR2 = pwm_position;
+		servo_position[servo_select] = position;
 	}
 	
 	return;
@@ -314,7 +314,7 @@ void main_control(uint8_t servo_select)
 			break;
 		}
 	}
-	
+	servo_recipe_index[servo_select]++;
 	return;
 }
 
@@ -358,26 +358,33 @@ void check_status_leds(uint8_t servo_select)
 	return;
 }
 
+char user_input[3];
+uint8_t rxByte;
+unsigned char i = 0;
+
 void process_user_commands(void)
 {
-	unsigned char user_input[3];
 	char msg[5];
-	unsigned char i = 0;
 	
-	sprintf(msg, "\n\r> ");
-	USART_Write(USART2, (uint8_t *)msg, strlen(msg));
-	
-	do
+	if (i == 0)
 	{
-		user_input[i] = USART_Read(USART2);
-		USART_Write(USART2, (uint8_t *)user_input[i], 8);
+		sprintf(msg, "\n\r> ");
+		USART_Write(USART2, (uint8_t *)msg, strlen(msg));
+	}
+	
+	if (!(USART2->ISR & USART_ISR_RXNE))
+	{
+		rxByte = USART_Read(USART2);
+	    if (rxByte != 0x0D)
+		{	
+			USART_Write(USART2, &rxByte, 1);
+		}
+		user_input[i] = rxByte;
 		i++;
 	}
-	while(user_input[i-1] != 0x0D);
 	
-	if (user_input[0] == 0x0D)
-		return;
-	
+	if (i == 3)
+	{
 	switch(user_input[0])
 	{
 		case 'p':
@@ -447,6 +454,10 @@ void process_user_commands(void)
 		{
 			process_user_commands();
 			break;
+		}
+		default:
+		{
+			return;
 		}
 	}
 	
@@ -520,7 +531,16 @@ void process_user_commands(void)
 			process_user_commands();
 			break;
 		}
+		default:
+		{
+			return;
+		}
 	}
+	i = 0;
+	event_handler_servo1(SERVO1);
+	event_handler_servo2(SERVO2);
+	}
+	return;
 }
 
 void event_handler_servo1(uint8_t servo_select)
@@ -529,7 +549,7 @@ void event_handler_servo1(uint8_t servo_select)
 	{
 		case (state_at_position):
 		{
-						if (servo1_events == user_paused) // if events returned from user_command() is user_paused
+			if (servo1_events == user_paused) // if events returned from user_command() is user_paused
 			{			
 				current_servo_state[servo_select] = state_at_position; // the state of the servo stays the same
 				current_servo_status[servo_select] = status_paused;    // the status of the servo is paused	

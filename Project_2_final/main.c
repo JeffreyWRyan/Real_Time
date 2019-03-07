@@ -358,9 +358,9 @@ void check_status_leds(uint8_t servo_select)
 	return;
 }
 
-char user_input[3];
+char user_input[4];
 uint8_t rxByte;
-unsigned char i = 0;
+char i = 0;
 
 void process_user_commands(void)
 {
@@ -370,9 +370,10 @@ void process_user_commands(void)
 	{
 		sprintf(msg, "\n\r> ");
 		USART_Write(USART2, (uint8_t *)msg, strlen(msg));
+		i++;
 	}
 	
-	if (!(USART2->ISR & USART_ISR_RXNE))
+	if (USART2->ISR & USART_ISR_RXNE)
 	{
 		rxByte = USART_Read(USART2);
 	    if (rxByte != 0x0D)
@@ -383,9 +384,9 @@ void process_user_commands(void)
 		i++;
 	}
 	
-	if (i == 3)
+	if (i == 4)
 	{
-	switch(user_input[0])
+	switch(user_input[1])
 	{
 		case 'p':
 		case 'P':
@@ -461,7 +462,7 @@ void process_user_commands(void)
 		}
 	}
 	
-		switch(user_input[1])
+		switch(user_input[2])
 	{
 		case 'p':
 		case 'P':
